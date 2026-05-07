@@ -210,26 +210,51 @@
 const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
+const defaultUsers=[{name:'Alex Johnson',email:'alex@example.com',password:'password123',phone:'+91 9876543210',bio:'Frontend developer & task enthusiast.'}];
+let users = JSON.parse(localStorage.getItem('taskflow_users')) || defaultUsers;
+
 let S={
   screen:'login',
   currentUser:null,
   forgotMethod:'email',forgotSent:false,
   showDropdown:false,
   modal:null,
-  tasks:[
-    {id:1,title:'Design the app wireframe',priority:'high',done:false,date:'May 6'},
-    {id:2,title:'Set up MongoDB connection',priority:'high',done:true,date:'May 6'},
-    {id:3,title:'Build REST API endpoints',priority:'medium',done:false,date:'May 6'},
-    {id:4,title:'Write unit tests',priority:'low',done:false,date:'May 6'},
-    {id:5,title:'Deploy to production',priority:'high',done:false,date:'May 7'},
-    {id:6,title:'Update documentation',priority:'low',done:true,date:'May 7'},
-  ],
+  tasks:[],
   filter:'all',priority:'medium',editId:null,nextId:7,
   showPw1:false,showPw2:false,showPw3:false,
   settings:{notifications:true,darkMode:true,sounds:false,autosave:true,theme:'#7c3aed'},
 };
 
-const users=[{name:'Alex Johnson',email:'alex@example.com',password:'password123',phone:'+91 9876543210',bio:'Frontend developer & task enthusiast.'}];
+function loadState() {
+  const savedData = localStorage.getItem('taskflow_data');
+  if (savedData) {
+    const data = JSON.parse(savedData);
+    S.currentUser = data.currentUser || null;
+    S.tasks = data.tasks || [];
+    S.nextId = data.nextId || 7;
+    S.settings = data.settings || S.settings;
+    if (S.currentUser) S.screen = 'app';
+  } else {
+    S.tasks = [
+      {id:1,title:'Design the app wireframe',priority:'high',done:false,date:'May 6'},
+      {id:2,title:'Set up MongoDB connection',priority:'high',done:true,date:'May 6'},
+      {id:3,title:'Build REST API endpoints',priority:'medium',done:false,date:'May 6'},
+      {id:4,title:'Write unit tests',priority:'low',done:false,date:'May 6'},
+      {id:5,title:'Deploy to production',priority:'high',done:false,date:'May 7'},
+      {id:6,title:'Update documentation',priority:'low',done:true,date:'May 7'},
+    ];
+  }
+}
+
+function saveState() {
+  localStorage.setItem('taskflow_users', JSON.stringify(users));
+  localStorage.setItem('taskflow_data', JSON.stringify({
+    currentUser: S.currentUser,
+    tasks: S.tasks,
+    nextId: S.nextId,
+    settings: S.settings
+  }));
+}
 
 function showToast(msg){
   const t=document.getElementById('toast');
@@ -526,7 +551,7 @@ function injectSettingsModal(){
           </div>
           <div style="padding:12px 0;">
             <div class="toggle-label" style="margin-bottom:10px;">Default priority</div>
-            <select style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:14px;color:var(--text);font-family:var(--font-body);outline:none;" id="def-priority" onchange="S.priority=this.value">
+            <select style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:14px;color:var(--text);font-family:var(--font-body);outline:none;" id="def-priority" onchange="S.priority=this.value; saveState();">
               <option value="high" ${S.priority==='high'?'selected':''} style="background:#1e1e24">High</option>
               <option value="medium" ${S.priority==='medium'?'selected':''} style="background:#1e1e24">Medium</option>
               <option value="low" ${S.priority==='low'?'selected':''} style="background:#1e1e24">Low</option>
@@ -573,12 +598,17 @@ function saveProfile(){
   S.currentUser.phone=phone;
   S.currentUser.bio=bio;
   const u=users.find(x=>x.email===S.currentUser.email||x.email===email);
-  if(u){u.name=name;u.email=email;u.phone=phone;u.bio=bio;}
+  if(u){
+    u.name=name;u.email=email;u.phone=phone;u.bio=bio;
+    if(newPw) u.password=newPw;
+  }
+  saveState();
   S.modal=null;render();showToast('✅ Profile updated successfully!');
 }
 
 function toggleSetting(key){
   S.settings[key]=!S.settings[key];
+  saveState();
   // re-inject modal in place without full render to keep scroll
   if(S.modal==='settings')injectSettingsModal();
   else if(S.modal==='profile')injectProfileModal();
@@ -587,21 +617,24 @@ function toggleSetting(key){
 function setTheme(c){
   S.settings.theme=c;
   document.documentElement.style.setProperty('--accent2',c);
+  saveState();
   if(S.modal==='settings')injectSettingsModal();
 }
 
 function saveSettings(){
   document.documentElement.style.setProperty('--accent2',S.settings.theme);
+  saveState();
   S.modal=null;render();showToast('✅ Settings saved!');
 }
 
 function clearCompleted(){
   S.tasks=S.tasks.filter(t=>!t.done);
+  saveState();
   S.modal=null;render();showToast('🗑️ Completed tasks cleared');
 }
 function clearAll(){
   if(confirm('Delete ALL tasks? This cannot be undone.')){
-    S.tasks=[];S.modal=null;render();showToast('🗑️ All tasks deleted');
+    S.tasks=[];saveState();S.modal=null;render();showToast('🗑️ All tasks deleted');
   }
 }
 
@@ -653,7 +686,7 @@ function doLogin(){
   if(!email||!pw){showError('login-error','Please fill in all fields.');return;}
   const u=users.find(u=>u.email===email&&u.password===pw);
   if(!u){showError('login-error','Incorrect email or password.');return;}
-  S.currentUser=u;S.screen='app';render();showToast('👋 Welcome back, '+u.name.split(' ')[0]+'!');
+  S.currentUser=u;S.screen='app';saveState();render();showToast('👋 Welcome back, '+u.name.split(' ')[0]+'!');
 }
 
 function doSignup(){
@@ -666,7 +699,7 @@ function doSignup(){
   if(pw!==pw2){showError('signup-error','Passwords do not match.');return;}
   if(users.find(u=>u.email===email)){showError('signup-error','Account already exists.');return;}
   const nu={name,email,password:pw,phone:'',bio:''};
-  users.push(nu);S.currentUser=nu;S.screen='app';render();showToast('🎉 Welcome, '+name.split(' ')[0]+'!');
+  users.push(nu);S.currentUser=nu;S.screen='app';saveState();render();showToast('🎉 Welcome, '+name.split(' ')[0]+'!');
 }
 
 function doForgot(){
@@ -675,7 +708,7 @@ function doForgot(){
   S.forgotSent=true;render();
 }
 
-function doLogout(){S.currentUser=null;S.screen='login';S.showDropdown=false;S.modal=null;render();showToast('👋 Signed out');}
+function doLogout(){S.currentUser=null;S.screen='login';S.showDropdown=false;S.modal=null;saveState();render();showToast('👋 Signed out');}
 
 function selectPriority(p){S.priority=p;render();}
 
@@ -685,18 +718,19 @@ function addTask(){
   if(!title){showToast('Please enter a task!');return;}
   const d=new Date();
   S.tasks.unshift({id:S.nextId++,title,priority:S.priority,done:false,date:`${months[d.getMonth()]} ${d.getDate()}`});
+  saveState();
   if(inp)inp.value='';
   showToast('✅ Task added!');render();
 }
 
-function toggleDone(id){S.tasks=S.tasks.map(t=>t.id===id?{...t,done:!t.done}:t);render();}
-function deleteTask(id){S.tasks=S.tasks.filter(t=>t.id!==id);showToast('🗑️ Deleted');render();}
+function toggleDone(id){S.tasks=S.tasks.map(t=>t.id===id?{...t,done:!t.done}:t);saveState();render();}
+function deleteTask(id){S.tasks=S.tasks.filter(t=>t.id!==id);saveState();showToast('🗑️ Deleted');render();}
 function startEdit(id){S.editId=id;render();}
 function saveEdit(id){
   const inp=document.getElementById('edit-'+id);
   const val=inp?inp.value.trim():'';
   if(val)S.tasks=S.tasks.map(t=>t.id===id?{...t,title:val}:t);
-  S.editId=null;showToast('✏️ Updated!');render();
+  S.editId=null;saveState();showToast('✏️ Updated!');render();
 }
 function cancelEdit(){S.editId=null;render();}
 function setFilter(f){S.filter=f;render();}
@@ -710,6 +744,9 @@ function getFiltered(){
   return tasks;
 }
 
+// Startup
+loadState();
+document.documentElement.style.setProperty('--accent2', S.settings.theme);
 render();
 </script>
 </body>
