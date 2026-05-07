@@ -229,7 +229,15 @@ function loadState() {
   const savedData = localStorage.getItem('taskflow_data');
   if (savedData) {
     const data = JSON.parse(savedData);
-    S.currentUser = data.currentUser || null;
+    
+    // Restore currentUser reference from the users array to ensure sync
+    if (data.currentUser) {
+      const matchedUser = users.find(u => u.email.toLowerCase() === data.currentUser.email.toLowerCase());
+      S.currentUser = matchedUser || data.currentUser;
+    } else {
+      S.currentUser = null;
+    }
+
     S.tasks = data.tasks || [];
     S.nextId = data.nextId || 7;
     S.settings = data.settings || S.settings;
@@ -581,27 +589,46 @@ function closeModalOnOverlay(e){if(e.target.id==='modal-overlay')closeModal();}
 
 function saveProfile(){
   const name=document.getElementById('prof-name').value.trim();
-  const email=document.getElementById('prof-email').value.trim();
+  const email=document.getElementById('prof-email').value.trim().toLowerCase();
   const phone=document.getElementById('prof-phone').value.trim();
   const bio=document.getElementById('prof-bio').value.trim();
   const curPw=document.getElementById('prof-cur-pw').value;
   const newPw=document.getElementById('prof-new-pw').value;
+  
   if(!name){showToast('❌ Name cannot be empty.');return;}
   if(!email){showToast('❌ Email cannot be empty.');return;}
+  
+  // Check if email changed and if it's already taken
+  if (email !== S.currentUser.email.toLowerCase()) {
+    if (users.find(u => u.email.toLowerCase() === email)) {
+      showToast('❌ Email already in use by another account.');
+      return;
+    }
+  }
+
   if(newPw){
     if(curPw!==S.currentUser.password){showToast('❌ Current password is incorrect.');return;}
     if(newPw.length<8){showToast('❌ New password must be 8+ characters.');return;}
     S.currentUser.password=newPw;
   }
+
+  // Find user in master list using original email before we update the session object
+  const userInList = users.find(x => x.email.toLowerCase() === S.currentUser.email.toLowerCase());
+  
+  // Update both the session and the master list entry
   S.currentUser.name=name;
   S.currentUser.email=email;
   S.currentUser.phone=phone;
   S.currentUser.bio=bio;
-  const u=users.find(x=>x.email===S.currentUser.email||x.email===email);
-  if(u){
-    u.name=name;u.email=email;u.phone=phone;u.bio=bio;
-    if(newPw) u.password=newPw;
+
+  if (userInList) {
+    userInList.name = name;
+    userInList.email = email;
+    userInList.phone = phone;
+    userInList.bio = bio;
+    if (newPw) userInList.password = newPw;
   }
+  
   saveState();
   S.modal=null;render();showToast('✅ Profile updated successfully!');
 }
@@ -681,23 +708,23 @@ function checkStrength(pw){
 function showError(id,msg){const el=document.getElementById(id);if(el){el.style.display='block';el.textContent=msg;}}
 
 function doLogin(){
-  const email=document.getElementById('login-email').value.trim();
+  const email=document.getElementById('login-email').value.trim().toLowerCase();
   const pw=document.getElementById('login-pw').value;
   if(!email||!pw){showError('login-error','Please fill in all fields.');return;}
-  const u=users.find(u=>u.email===email&&u.password===pw);
+  const u=users.find(u=>u.email.toLowerCase()===email&&u.password===pw);
   if(!u){showError('login-error','Incorrect email or password.');return;}
   S.currentUser=u;S.screen='app';saveState();render();showToast('👋 Welcome back, '+u.name.split(' ')[0]+'!');
 }
 
 function doSignup(){
   const name=document.getElementById('signup-name').value.trim();
-  const email=document.getElementById('signup-email').value.trim();
+  const email=document.getElementById('signup-email').value.trim().toLowerCase();
   const pw=document.getElementById('signup-pw').value;
   const pw2=document.getElementById('signup-pw2').value;
   if(!name||!email||!pw||!pw2){showError('signup-error','Please fill in all fields.');return;}
   if(pw.length<8){showError('signup-error','Password must be at least 8 characters.');return;}
   if(pw!==pw2){showError('signup-error','Passwords do not match.');return;}
-  if(users.find(u=>u.email===email)){showError('signup-error','Account already exists.');return;}
+  if(users.find(u=>u.email.toLowerCase()===email)){showError('signup-error','Account already exists.');return;}
   const nu={name,email,password:pw,phone:'',bio:''};
   users.push(nu);S.currentUser=nu;S.screen='app';saveState();render();showToast('🎉 Welcome, '+name.split(' ')[0]+'!');
 }
